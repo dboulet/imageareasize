@@ -1,0 +1,5 @@
+name = Image Area Size
+description = Provides an image effect which resizes it to a certain area size.
+core = 7.x
+package = Image
+dependencies[] = image

@@ -1,0 +1,154 @@
+<?php
+/**
+ * @file
+ * Provides an image effect which resizes it to a certain area size.
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function imageareasize_theme() {
+  return array(
+    'imageareasize_resize_summary' => array(
+      'variables' => array('data' => NULL),
+    ),
+  );
+}
+
+/**
+ * Implements hook_image_effect_info().
+ */
+function imageareasize_image_effect_info() {
+  $effects = array();
+
+  $effects['imageareasize_resize'] = array(
+    'label' => t('Resize to approximate area'),
+    'help' => t('Resize an image to an approximate area size.'),
+    'effect callback' => 'imageareasize_resize_image',
+    'form callback' => 'imageareasize_resize_form',
+    'summary theme' => 'imageareasize_resize_summary',
+  );
+
+  return $effects;
+}
+
+/**
+ * Image effect callback; Resize an image resource.
+ *
+ * @param $image
+ *   An image object returned by image_load().
+ * @param $data
+ *   An array of attributes to use when performing the resize effect with the
+ *   following items:
+ *   - "area": An integer representing the desired area in square pixels.
+ *   - "max_width": An integer representing the maximum desired width in pixels.
+ *   - "max_height": An integer representing the maximum desired height in pixels.
+ *
+ * @return
+ *   TRUE on success. FALSE on failure to resize image.
+ *
+ * @see image_resize()
+ */
+function imageareasize_resize_image(&$image, $data) {
+  $area = $data['area'];
+  $max_width = !empty($data['max_width']) ? $data['max_width'] : NULL;
+  $max_height = !empty($data['max_height']) ? $data['max_height'] : NULL;
+
+  $dimensions = $image->info;
+
+  if ($max_width || $max_height) {
+    image_dimensions_scale($dimensions, $max_width, $max_height);
+  }
+
+  if (($dimensions['width'] * $dimensions['height']) > $area) {
+    $width = $dimensions['width'];
+    $height = $dimensions['height'];
+    // Calculate new height
+    $dimensions['height'] = (int) round(sqrt($area * $height / $width));
+    // Calculate new width
+    $dimensions['width'] = ($width * $dimensions['height'] / $height);
+  }
+
+  if (!image_scale($image, $dimensions['width'], $dimensions['height'])) {
+    watchdog('image', 'Image resize failed using the %toolkit toolkit on %path (%mimetype, %dimensions)', array('%toolkit' => $image->toolkit, '%path' => $image->source, '%mimetype' => $image->info['mime_type'], '%dimensions' => $image->info['width'] . 'x' . $image->info['height']), WATCHDOG_ERROR);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * Form structure for the image resize form.
+ *
+ * Note that this is not a complete form, it only contains the portion of the
+ * form for configuring the resize options. Therefore it does not not need to
+ * include metadata about the effect, nor a submit button.
+ *
+ * @param $data
+ *   The current configuration for this resize effect.
+ */
+function imageareasize_resize_form($data) {
+  $form['area'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Area'),
+    '#description' => t('Image will be resized to be as close to this number as possible.'),
+    '#default_value' => isset($data['area']) ? $data['area'] : '',
+    '#field_suffix' => ' ' . t('square pixels'),
+    '#required' => TRUE,
+    '#size' => 16,
+    '#element_validate' => array('image_effect_integer_validate'),
+    '#allow_negative' => FALSE,
+  );
+  $form['max_width'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Maximum Width'),
+    '#description' => t('The maximum allowed width for the image.'),
+    '#default_value' => isset($data['max_width']) ? $data['max_width'] : '',
+    '#field_suffix' => ' ' . t('pixels'),
+    '#required' => FALSE,
+    '#size' => 16,
+    '#element_validate' => array('image_effect_integer_validate'),
+    '#allow_negative' => FALSE,
+  );
+  $form['max_height'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Maximum Height'),
+    '#description' => t('The maximum allowed height for the image.'),
+    '#default_value' => isset($data['max_height']) ? $data['max_height'] : '',
+    '#field_suffix' => ' ' . t('pixels'),
+    '#required' => FALSE,
+    '#size' => 16,
+    '#element_validate' => array('image_effect_integer_validate'),
+    '#allow_negative' => FALSE,
+  );
+  return $form;
+}
+
+/**
+ * Returns HTML for a summary of an image resize effect.
+ *
+ * @param $variables
+ *   An associative array containing:
+ *   - data: The current configuration for this resize effect.
+ *
+ * @ingroup themeable
+ */
+function theme_imageareasize_resize_summary($variables) {
+  $data = $variables['data'];
+  $summary = '';
+
+  if ($data['area']) {
+    $summary .= number_format(check_plain($data['area'])) . ' pixels<sup>2</sup>';
+  }
+  if ($data['max_width'] && $data['max_height']) {
+    $summary .= ' ' . t('(Maximum size: @size)', array('@size' => number_format($data['max_width']) . 'x' . number_format($data['max_height'])));
+  }
+  elseif ($data['max_width']) {
+    $summary .= ' ' . t('(Maximum width: @width)', array('@width' => number_format($data['max_width'])));
+  }
+  elseif ($data['max_height']) {
+    $summary .= ' ' . t('(Maximum height: @height)', array('@height' => number_format($data['max_height'])));
+  }
+
+  return $summary;
+}
